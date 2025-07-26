@@ -1,4 +1,3 @@
-
 const typingElement = document.getElementById("typing-text");
 if (typingElement) {
   const text = "Welcome to The XIV Project";
@@ -15,13 +14,11 @@ if (typingElement) {
   type();
 }
 
-
 document.body.addEventListener("keydown", (e) => {
   if (e.key.toLowerCase() === 'f') {
     alert("Boo!");
   }
 });
-
 
 const input = document.getElementById('insert-input');
 const button = document.getElementById('insert-btn');
@@ -45,18 +42,47 @@ if (button && input && result) {
   });
 }
 
+// === VIEW COUNTER USING JSONBIN.IO ===
 
-const viewCountEl = document.getElementById('view-count');
+const BIN_ID = '68853128f7e7a370d1ee6a89';      // <-- Put your jsonbin.io bin ID here
+const API_KEY = '$2a$10$KVYC/407xLBFjFLQse8idOBO7Rnt295RL9Zg85oYMQ9hfKEik131a';    // <-- Put your jsonbin.io API key here
 
+const headers = {
+  'Content-Type': 'application/json',
+  'X-Master-Key': API_KEY
+};
 
-if (viewCountEl) {
-  fetch('/.netlify/functions/view-counter')
-    .then(res => res.json())
-    .then(data => {
-      viewCountEl.textContent = `Views: ${data.count}`;
-    })
-    .catch(err => {
-      console.error('View counter error:', err);
-      viewCountEl.textContent = 'Views: ?';
-    });
+async function getCount() {
+  try {
+    const res = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}/latest`, { headers });
+    const data = await res.json();
+    return data.record.count || 0;
+  } catch (e) {
+    console.error('Error fetching count:', e);
+    return 0;
+  }
 }
+
+async function updateCount(newCount) {
+  try {
+    await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ count: newCount })
+    });
+  } catch (e) {
+    console.error('Error updating count:', e);
+  }
+}
+
+async function incrementViewCount() {
+  let count = await getCount();
+  count++;
+  await updateCount(count);
+  const el = document.getElementById('view-count');
+  if (el) {
+    el.textContent = `Views: ${count}`;
+  }
+}
+
+incrementViewCount();
