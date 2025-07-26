@@ -47,19 +47,16 @@ if (button && input && result) {
 
 
 const viewCountEl = document.getElementById('view-count');
-const namespace = 'thexivproject';
-const key = 'xiv';
+
 
 if (viewCountEl) {
-  fetch(`https://api.countapi.xyz/hit/${namespace}/${key}`)
-    .then(response => {
-      if (!response.ok) throw new Error('Network response was not ok');
-      return response.json();
-    })
+  fetch('/.netlify/functions/view-counter')
+    .then(res => res.json())
     .then(data => {
-      viewCountEl.textContent = `Views: ${data.value}`;
+      viewCountEl.textContent = `Views: ${data.count}`;
     })
-    .catch(() => {
+    .catch(err => {
+      console.error('View counter error:', err);
       viewCountEl.textContent = 'Views: ?';
     });
 }
