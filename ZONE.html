@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zone Hunt | The XIV Project</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <style>
+    #map-container {
+      height: 400px; margin: 1.5rem 0; border-radius: 12px;
+      overflow: hidden; border: 1px solid rgba(100,100,160,0.3); display: none;
+    }
+    #map { height: 100%; }
+    .zone-setup {
+      margin: 1rem 0; padding: 1rem;
+      background: rgba(40,40,70,0.5); border-radius: 8px;
+    }
+    .zone-setup label { display: block; margin-bottom: 0.5rem; margin-top: 0.8rem; }
+    .zone-setup label:first-child { margin-top: 0; }
+    .zone-setup input {
+      width: 120px; padding: 0.5rem; font-size: 1rem;
+      border-radius: 6px; border: 1px solid #666; background: #222; color: white;
+    }
+    #grace-banner {
+      display: none; text-align: center; padding: 1rem; margin: 1rem 0;
+      border-radius: 8px; font-size: 1.3rem; font-weight: bold;
+      background: rgba(0,200,100,0.15); border: 1px solid rgba(0,200,100,0.4); color: #00ff99;
+    }
+    #grace-banner.hunter {
+      background: rgba(200,50,50,0.15); border-color: rgba(200,50,50,0.4); color: #ff6666;
+    }
+    #ping-banner {
+      display: none; text-align: center; padding: 1rem; margin: 0.5rem 0;
+      border-radius: 8px; font-size: 1.2rem; font-weight: bold; line-height: 1.3;
+      animation: pingPulse 0.5s ease-in-out infinite alternate;
+    }
+    #ping-banner.hunter { background: rgba(255,100,0,0.15); border: 1px solid rgba(255,100,0,0.4); color: #ffaa44; }
+    #ping-banner.runner { background: rgba(255,50,50,0.15); border: 1px solid rgba(255,50,50,0.4); color: #ff7777; }
+    @keyframes pingPulse { from { opacity:1; } to { opacity:0.5; } }
+    .player-row {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.5rem 1rem; margin: 0.4rem 0;
+      background: rgba(40,40,70,0.4); border-radius: 8px; gap: 0.5rem;
+    }
+    .player-row .name { flex: 1; }
+    .role-select {
+      appearance: none; -webkit-appearance: none;
+      padding: 0.3rem 2rem 0.3rem 0.7rem; border-radius: 20px;
+      font-size: 0.85rem; font-weight: bold; cursor: pointer; border: 1px solid;
+      background-repeat: no-repeat; background-position: right 0.5rem center; background-size: 10px;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23aaa'/%3E%3C/svg%3E");
+    }
+    .role-select.random  { background-color: rgba(180,180,60,0.15); color: #dddd66; border-color: rgba(180,180,60,0.35); }
+    .role-select.hunter  { background-color: rgba(255,60,60,0.15);  color: #ff7777; border-color: rgba(255,60,60,0.35); }
+    .role-select.runner  { background-color: rgba(60,130,255,0.15); color: #88aaff; border-color: rgba(60,130,255,0.35); }
+    .role-select option  { background: #1a1a2e; color: white; }
+    .role-badge { font-size: 0.85rem; padding: 0.3rem 0.8rem; border-radius: 20px; font-weight: bold; }
+    .role-badge.hunter { background: rgba(255,60,60,0.15);  color: #ff7777; border: 1px solid rgba(255,60,60,0.35); }
+    .role-badge.runner  { background: rgba(60,130,255,0.15); color: #88aaff; border: 1px solid rgba(60,130,255,0.35); }
+    .role-badge.random  { background: rgba(180,180,60,0.15); color: #dddd66; border: 1px solid rgba(180,180,60,0.35); }
+    .role-hint { font-size: 0.82rem; opacity: 0.6; margin-top: 0.6rem; font-style: italic; }
+    .zone-hunt-marker { background: none !important; border: none !important; }
+    .kill-feed {
+      position: fixed; top: 1rem; right: 1rem; z-index: 9998;
+      display: flex; flex-direction: column; gap: 0.4rem; max-width: 260px;
+    }
+    .kill-entry {
+      display: flex; align-items: center; gap: 0.6rem;
+      background: rgba(20,10,10,0.92); border: 1px solid rgba(255,60,60,0.4);
+      border-radius: 8px; padding: 0.5rem 0.8rem;
+      font-size: 0.9rem; color: #ffaaaa;
+      animation: killSlide 0.3s ease-out;
+    }
+    .kill-entry img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; border: 2px solid #ff6666; }
+    .kill-entry .kill-avatar-placeholder {
+      width: 28px; height: 28px; border-radius: 50%;
+      background: #ff3333; display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 0.85rem; color: white; border: 2px solid #ff6666; flex-shrink: 0;
+    }
+    @keyframes killSlide { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }
+    #debug-toggle {
+      position: fixed; bottom: 1rem; right: 1rem;
+      background: rgba(180,60,60,0.7); color: white;
+      border: none; border-radius: 50%; width: 44px; height: 44px;
+      font-size: 1.2rem; cursor: pointer; z-index: 9999;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+  </style>
+</head>
+<body>
+  <div id="left-stars"></div>
+  <div id="right-stars"></div>
+  <div class="main-content">
+    <h1>Zone Hunt</h1>
+
+
+    <div id="join-screen">
+      <div class="about-section">
+        <p>Real-life multiplayer hide and seek.<br>Stay inside the zone. Avoid the hunter.</p>
+      </div>
+      <div class="about-section" style="margin:2.5rem 0 2rem;">
+        <label style="display:block;margin-bottom:0.7rem;font-weight:500;">Your name:</label>
+        <input type="text" id="username" placeholder="Enter your name" style="width:100%;max-width:340px;padding:0.9rem;font-size:1.1rem;border-radius:6px;">
+
+      </div>
+      <button id="join-btn" class="start-btn">Join Game</button>
+      <p style="margin-top:2.5rem;font-size:0.95rem;opacity:0.8;text-align:center;">
+        First player becomes host &bull; Start the game when ready
+      </p>
+    </div>
+
+
+    <div id="game-screen" style="display:none;">
+      <h2 id="role">Connecting...</h2>
+      <div id="status-message" class="about-section" style="min-height:2.6rem;font-size:1.05rem;color:#aaccff;text-align:center;"></div>
+      <div id="game-timer" class="about-section" style="display:none;font-size:2rem;font-weight:bold;color:#aaccff;letter-spacing:3px;text-align:center;"></div>
+      <div id="grace-banner"></div>
+      <div id="ping-banner"></div>
+      <div id="catch-panel" style="display:none;margin:0.8rem 0;padding:1rem;background:rgba(40,40,70,0.5);border-radius:8px;border:1px solid rgba(100,100,160,0.3);">
+        <strong style="color:#ff7777;">Catch a runner:</strong>
+        <div id="catch-buttons" style="margin-top:0.6rem;display:flex;flex-wrap:wrap;gap:0.5rem;"></div>
+      </div>
+
+
+      <div id="zone-setup" class="zone-setup" style="display:none;">
+        <label>Game zone radius (meters):</label>
+        <input type="number" id="zone-radius" value="500" min="100" max="2000" step="50">
+        <label>Runner head-start (seconds):</label>
+        <input type="number" id="grace-period" value="30" min="0" max="300" step="5">
+        <label>Game duration (minutes, 0 = unlimited):</label>
+        <input type="number" id="game-duration" value="10" min="0" max="60" step="1">
+        <label>Ping interval (seconds):</label>
+        <input type="number" id="ping-mins" value="30" min="5" max="600" step="5">
+        <label style="display:flex;align-items:center;gap:0.6rem;margin-top:0.8rem;cursor:pointer;">
+          <input type="checkbox" id="shrink-zone" style="width:18px;height:18px;cursor:pointer;">
+          Shrinking zone
+        </label>
+        <label style="margin-top:0.8rem;display:block;">Catch mode:</label>
+        <div style="display:flex;gap:0.8rem;margin-top:0.4rem;">
+          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+            <input type="radio" name="catch-mode" id="catch-proximity" value="proximity" checked>
+            Proximity (GPS)
+          </label>
+          <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+            <input type="radio" name="catch-mode" id="catch-manual" value="manual">
+            Manual (catch button)
+          </label>
+        </div>
+        <div id="shrink-options" style="display:none;margin-top:0.5rem;padding-left:1.5rem;">
+          <label>Shrink to (% of original):</label>
+          <input type="number" id="shrink-target" value="20" min="5" max="90" step="5" style="width:80px;padding:0.4rem;border-radius:6px;border:1px solid #666;background:#222;color:white;">
+          <label>Shrink over (seconds):</label>
+          <input type="number" id="shrink-duration" value="300" min="30" max="3600" step="30" style="width:100px;padding:0.4rem;border-radius:6px;border:1px solid #666;background:#222;color:white;">
+        </div>
+        <p style="font-size:0.9rem;opacity:0.8;margin-top:0.8rem;">
+          Runners marked <strong>Random</strong> will be assigned randomly.<br>
+          Zone is centered on <strong>your location</strong> when you start.
+        </p>
+      </div>
+
+      <div id="countdown" class="about-section" style="font-size:1.8rem;color:#ffcc00;font-weight:bold;text-align:center;min-height:3rem;display:none;"></div>
+      <div id="map-container"><div id="map"></div></div>
+
+      <div id="players-list" class="about-section">
+        <strong>Players in lobby (0):</strong>
+        <div id="player-items" style="margin-top:1.2rem;"></div>
+      </div>
+
+      <div class="about-section" id="rules-section" style="display:none;">
+        <p>
+          Hunter must get within <strong>20 meters</strong>.<br>
+          Runners must stay inside the game zone.<br>
+          Leaving the zone = eliminated.<br>
+          Runners are invincible during the head-start period.<br>
+          All player locations are revealed every few minutes for 5 seconds.
+        </p>
+      </div>
+
+      <div style="margin:3rem 0;text-align:center;">
+        <button id="start-btn" class="start-btn" style="display:none;min-width:240px;margin:0 0.8rem 1rem;">Start Game (5s countdown)</button>
+        <button id="reset-btn" class="start-btn" style="display:none;background:#444;min-width:240px;">Reset Game</button>
+      </div>
+
+      <!-- Debug panel -->
+      <div id="debug-panel" style="display:none;margin:1rem 0;padding:1rem;background:rgba(80,40,40,0.5);border:1px solid rgba(200,80,80,0.4);border-radius:8px;">
+        <strong style="color:#ff9999;">Debug Mode</strong>
+        <p style="font-size:0.85rem;opacity:0.7;margin:0.3rem 0 0.8rem;">Manually set your GPS location.</p>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+          <input type="number" id="debug-lat" placeholder="Latitude"  step="0.0001" style="width:130px;padding:0.4rem;border-radius:6px;border:1px solid #666;background:#222;color:white;font-size:0.9rem;">
+          <input type="number" id="debug-lng" placeholder="Longitude" step="0.0001" style="width:130px;padding:0.4rem;border-radius:6px;border:1px solid #666;background:#222;color:white;font-size:0.9rem;">
+          <button onclick="applyDebugLocation()" style="padding:0.4rem 1rem;border-radius:6px;background:rgba(200,80,80,0.3);border:1px solid rgba(200,80,80,0.5);color:#ffaaaa;cursor:pointer;">Set Location</button>
+        </div>
+        <div style="margin-top:0.8rem;display:flex;gap:0.5rem;flex-wrap:wrap;">
+          <button onclick="nudgeLocation(0.0002,0)"  style="padding:0.3rem 0.7rem;border-radius:6px;background:rgba(60,60,100,0.5);border:1px solid #446;color:#aaf;cursor:pointer;">N</button>
+          <button onclick="nudgeLocation(-0.0002,0)" style="padding:0.3rem 0.7rem;border-radius:6px;background:rgba(60,60,100,0.5);border:1px solid #446;color:#aaf;cursor:pointer;">S</button>
+          <button onclick="nudgeLocation(0,0.0003)"  style="padding:0.3rem 0.7rem;border-radius:6px;background:rgba(60,60,100,0.5);border:1px solid #446;color:#aaf;cursor:pointer;">E</button>
+          <button onclick="nudgeLocation(0,-0.0003)" style="padding:0.3rem 0.7rem;border-radius:6px;background:rgba(60,60,100,0.5);border:1px solid #446;color:#aaf;cursor:pointer;">W</button>
+          <span id="debug-coords" style="font-size:0.8rem;opacity:0.6;align-self:center;"></span>
+        </div>
+      </div>
+    </div>
+
+    <p style="margin-top:4rem;text-align:center;">
+      <a href="Projects.html" class="back-link">Back to Projects</a>
+    </p>
+  </div>
+
+<script>
+const SERVER = "https://denis-northmost-seminormally.ngrok-free.dev";
+const socket = io(SERVER, {
+  transports: ['websocket', 'polling'],
+  extraHeaders: { "ngrok-skip-browser-warning": "69420" }
+});
+
+const $ = id => document.getElementById(id);
+const els = {
+  joinScreen:  $('join-screen'),  gameScreen:  $('game-screen'),
+  username:    $('username'),     joinBtn:     $('join-btn'),
+  role:        $('role'),         status:      $('status-message'),
+  countdown:   $('countdown'),   graceBanner: $('grace-banner'),
+  pingBanner:  $('ping-banner'), mapContainer:$('map-container'),
+  zoneSetup:   $('zone-setup'),  zoneRadius:  $('zone-radius'),
+  gracePeriod: $('grace-period'),gameDuration:$('game-duration'),pingMins:$('ping-mins'),
+  playersList: $('players-list'),
+  playerItems: $('player-items'),rules:       $('rules-section'),
+  startBtn:    $('start-btn'),   resetBtn:    $('reset-btn')
+};
+
+let myId            = null;
+let isHost          = false;
+let map             = null;
+let markers         = {};
+let zoneCircle      = null;
+let lastPos         = null;
+let graceTimer      = null;
+let graceTimerEndAt = null;
+let pingMarkers     = {};
+let pingTimeout     = null;
+let gameTimerEl     = null;
+let currentHunterIds = [];
+let currentCatchMode = 'proximity';
+
+
+document.getElementById('shrink-zone').addEventListener('change', function() {
+  document.getElementById('shrink-options').style.display = this.checked ? 'block' : 'none';
+});
+
+
+els.joinBtn.addEventListener('click', () => {
+  const name = (els.username.value || "Player").trim();
+  if (name.length < 2) { alert("Please choose a name (min 2 characters)"); return; }
+  myId = socket.id;
+  els.joinScreen.style.display = 'none';
+  els.gameScreen.style.display = 'block';
+  els.role.textContent = "Connecting...";
+  els.status.textContent = "Establishing connection...";
+  els.status.style.color = '#88ccff';
+  socket.emit('join', name);
+});
+
+
+function startGraceBanner(endsAt, amHunter) {
+  if (graceTimer && graceTimerEndAt === endsAt) return;
+  clearInterval(graceTimer);
+  graceTimerEndAt = endsAt;
+  els.graceBanner.style.display = 'block';
+  els.graceBanner.className = amHunter ? 'hunter' : '';
+  function tick() {
+    const s = Math.ceil((endsAt - Date.now()) / 1000);
+    if (s <= 0) {
+      clearInterval(graceTimer); graceTimer = null; graceTimerEndAt = null;
+      els.graceBanner.style.display = 'none';
+      els.role.textContent = amHunter ? 'HUNT BEGINS - GO!' : 'RUNNER - Stay hidden!';
+      els.role.style.color = amHunter ? '#ff4444' : '';
+    } else {
+      els.graceBanner.textContent = amHunter
+        ? 'Runners are invincible - ' + s + 's'
+        : 'Head-start - ' + s + 's remaining, run!';
+    }
+  }
+  tick();
+  graceTimer = setInterval(tick, 1000);
+}
+
+function initMap(lat, lng) {
+  if (map) return;
+  map = L.map('map', { zoomControl: true }).setView([lat || 51.505, lng || -0.09], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(map);
+  setTimeout(() => map.invalidateSize(true), 300);
+}
+
+function makeIcon(color, glow) {
+  const shadow = glow
+    ? 'box-shadow:0 0 14px ' + color + ',0 0 4px white;'
+    : 'box-shadow:0 0 6px rgba(0,0,0,0.8);';
+  return L.divIcon({
+    className: 'zone-hunt-marker',
+    html: '<div style="width:18px;height:18px;border-radius:50%;background:' + color + ';border:3px solid white;' + shadow + '"></div>',
+    iconSize: [24,24], iconAnchor: [12,12],
+    popupAnchor: [0,-12]
+  });
+}
+
+function updateMap(players, hunterIds, graceEndsAt) {
+  if (!map) initMap();
+  if (!map) return;
+  els.mapContainer.style.display = 'block';
+  setTimeout(() => map.invalidateSize(true), 100);
+
+  const inGrace = graceEndsAt && Date.now() < graceEndsAt;
+  const amHunter = hunterIds.includes(myId);
+
+  Object.keys(markers).forEach(id => {
+    if (!players[id]) {
+      map.removeLayer(markers[id]);
+      delete markers[id];
+    }
+  });
+
+  Object.entries(players).forEach(([id, p]) => {
+    const isMe = id === myId;
+
+t
+    let lat = p.lat, lng = p.lng;
+    if (isMe && (lat == null || lng == null) && lastPos) {
+      lat = lastPos.coords.latitude;
+      lng = lastPos.coords.longitude;
+    }
+
+    if (lat == null || lng == null) return;
+    p = { ...p, lat, lng };
+
+    const isHunter     = hunterIds.includes(id);
+    const isCaught     = p.caught;
+    const isInvincible = inGrace && !isHunter && !isCaught;
+
+    const color = isCaught ? '#888888' : isHunter ? '#ff3333' : isInvincible ? '#00ffaa' : isMe ? '#33ff33' : '#3388ff';
+    const icon  = makeIcon(color, isInvincible);
+    const label = p.username
+      + (isMe     ? ' (you)'    : '')
+      + (isHunter ? ' - HUNTER' : '')
+      + (isCaught ? ' - CAUGHT' : '')
+      + (isInvincible ? ' (shield)' : '');
+
+    if (markers[id]) {
+      markers[id].setLatLng([p.lat, p.lng]);
+      markers[id].setIcon(icon);
+      markers[id].setPopupContent(label);
+    } else {
+      markers[id] = L.marker([p.lat, p.lng], { icon }).bindPopup(label).addTo(map);
+    }
+
+
+    if (isMe) map.setView([p.lat, p.lng], map.getZoom());
+  });
+}
+
+const ROLE_LABEL = { random: 'Random', hunter: 'Hunter', runner: 'Runner' };
+
+function renderLobbyPlayers(players, hostId, assignedRoles) {
+  let count = 0, html = '';
+  Object.entries(players).forEach(([id, p]) => {
+    count++;
+    const role   = (assignedRoles && assignedRoles[id]) || 'random';
+    const youTag = id === myId  ? ' <em>(you)</em>'         : '';
+    const hstTag = id === hostId ? ' <strong>(host)</strong>' : '';
+    html += '<div class="player-row"><span class="name">' + p.username + youTag + hstTag + '</span>';
+    if (isHost) {
+      html += '<select class="role-select ' + role + '" onchange="setRole(\'' + id + '\', this)">'
+        + '<option value="random"' + (role==='random' ? ' selected' : '') + '>Random</option>'
+        + '<option value="hunter"' + (role==='hunter' ? ' selected' : '') + '>Hunter</option>'
+        + '<option value="runner"' + (role==='runner' ? ' selected' : '') + '>Runner</option>'
+        + '</select>';
+    } else {
+      html += '<span class="role-badge ' + role + '">' + ROLE_LABEL[role] + '</span>';
+    }
+    html += '</div>';
+  });
+  if (!html) html = '<div style="opacity:0.6;font-style:italic;padding:1rem;">- waiting for players -</div>';
+  if (isHost) html += '<p class="role-hint">Set each player&#39;s role. Random = assigned on start.</p>';
+  els.playerItems.innerHTML = html;
+  els.playersList.querySelector('strong').textContent = 'Players in lobby (' + count + ')';
+}
+
+function renderGamePlayers(players, hunterIds, hostId) {
+  let count = 0, html = '';
+  Object.entries(players).forEach(([id, p]) => {
+    count++;
+    const tag    = hunterIds.includes(id) ? 'Hunter' : 'Runner';
+    const st     = p.caught ? 'caught' : 'alive';
+    const youTag = id === myId   ? ' <em>(you)</em>'         : '';
+    const hstTag = id === hostId ? ' <strong>(host)</strong>' : '';
+    html += '<div style="margin:0.5rem 0;">' + tag + ' - ' + p.username + youTag + hstTag + ' - ' + st + '</div>';
+  });
+  els.playerItems.innerHTML = html || '<div style="opacity:0.6;font-style:italic;padding:1rem;">- no players -</div>';
+  els.playersList.querySelector('strong').textContent = 'Players (' + count + ')';
+}
+
+function setRole(playerId, selectEl) {
+  selectEl.className = 'role-select ' + selectEl.value;
+  socket.emit('setRole', { playerId, role: selectEl.value });
+}
+
+
+socket.on('connect', () => {
+  myId = socket.id;
+  els.status.textContent = "Connected!";
+  els.status.style.color = '#88ff88';
+  socket.emit('requestState');
+});
+
+
+socket.on('gameState', state => {
+  if (!state) return;
+  if (!myId) myId = socket.id;
+
+  const { players = {}, hostId: hId, hunterIds = [], gameStarted, zone, graceEndsAt, assignedRoles = {} } = state;
+  currentHunterIds = hunterIds;
+  currentCatchMode = state.catchMode || 'proximity';
+  isHost = (myId === hId);
+
+  els.startBtn.style.display  = (isHost && !gameStarted) ? 'inline-block' : 'none';
+  els.resetBtn.style.display  = isHost ? 'inline-block' : 'none';
+  els.zoneSetup.style.display = (isHost && !gameStarted) ? 'block' : 'none';
+
+  if (gameStarted) {
+    const amHunter = hunterIds.includes(myId);
+    const inGrace  = graceEndsAt && Date.now() < graceEndsAt;
+
+    if (inGrace) {
+      startGraceBanner(graceEndsAt, amHunter);
+      els.role.textContent = amHunter ? 'YOU ARE THE HUNTER - wait for head-start to end' : 'RUNNER - You are invincible, run!';
+      els.role.style.color = amHunter ? '#ff9944' : '#00ffaa';
+    } else {
+      clearInterval(graceTimer); graceTimer = null; graceTimerEndAt = null;
+      els.graceBanner.style.display = 'none';
+      els.role.textContent = amHunter ? 'YOU ARE THE HUNTER' : 'RUNNER - Stay hidden!';
+      els.role.style.color = amHunter ? '#ff4444' : '';
+    }
+
+    els.rules.style.display = 'block';
+    els.mapContainer.style.display = 'block';
+    const timerEl = document.getElementById('game-timer');
+    if (timerEl) timerEl.style.display = 'block';
+
+
+    const mapLat = (zone && zone.lat) ? zone.lat : (lastPos ? lastPos.coords.latitude  : 51.505);
+    const mapLng = (zone && zone.lng) ? zone.lng : (lastPos ? lastPos.coords.longitude : -0.09);
+    if (!map) initMap(mapLat, mapLng);
+    setTimeout(() => map && map.invalidateSize(true), 300);
+
+    if (zone && zone.lat && zone.radius) {
+      if (zoneCircle) map.removeLayer(zoneCircle);
+      zoneCircle = L.circle([zone.lat, zone.lng], {
+        color: '#00ff00', fillColor: '#00ff0022', fillOpacity: 0.2, radius: zone.radius
+      }).addTo(map);
+      map.fitBounds(zoneCircle.getBounds(), { padding: [50,50] });
+    }
+
+  
+    const me = players[myId];
+    console.log('[gameState] myId:', myId, '| my coords:', me ? (me.lat + ',' + me.lng) : 'NOT IN PLAYERS', '| total players:', Object.keys(players).length);
+    Object.entries(players).forEach(([id, p]) => {
+      if (id !== myId) console.log('  -> player', p.username, 'coords:', p.lat, p.lng);
+    });
+
+    updateMap(players, hunterIds, graceEndsAt);
+    renderGamePlayers(players, hunterIds, hId);
+
+   
+    const amHunterNow = hunterIds.includes(myId);
+    const inGraceNow  = graceEndsAt && Date.now() < graceEndsAt;
+    const catchPanel  = document.getElementById('catch-panel');
+    const catchBtns   = document.getElementById('catch-buttons');
+    if (amHunterNow && currentCatchMode === 'manual' && !inGraceNow && catchPanel && catchBtns) {
+      catchPanel.style.display = 'block';
+
+      catchBtns.innerHTML = '';
+      Object.entries(players).forEach(([id, p]) => {
+        if (hunterIds.includes(id) || p.caught) return;
+        const btn = document.createElement('button');
+        btn.textContent = 'Catch ' + p.username;
+        btn.style.cssText = 'padding:0.5rem 1rem;border-radius:8px;background:rgba(255,60,60,0.2);border:1px solid rgba(255,60,60,0.5);color:#ff9999;cursor:pointer;font-size:1rem;';
+        btn.onclick = () => {
+          if (confirm('Catch ' + p.username + '?')) {
+            socket.emit('manualCatch', { targetId: id });
+          }
+        };
+        catchBtns.appendChild(btn);
+      });
+      if (catchBtns.children.length === 0) {
+        catchPanel.style.display = 'none';
+      }
+    } else if (catchPanel) {
+      catchPanel.style.display = 'none';
+    }
+
+  } else {
+    clearInterval(graceTimer); graceTimer = null; graceTimerEndAt = null;
+    els.graceBanner.style.display  = 'none';
+    els.role.textContent           = isHost ? 'Lobby - You are HOST' : 'Lobby';
+    els.role.style.color           = '';
+    els.rules.style.display        = 'none';
+    els.mapContainer.style.display = 'none';
+    renderLobbyPlayers(players, hId, assignedRoles);
+  }
+
+  els.status.textContent = (isHost && !gameStarted) ? 'You are the host - set roles and start' : (!gameStarted ? 'Waiting for host to start...' : '');
+  els.status.style.color = (isHost && !gameStarted) ? '#ffdd44' : '#aaccff';
+});
+
+
+socket.on('countdown', n => {
+  if (n > 0) { els.countdown.textContent = 'Game starts in ' + n + '...'; els.countdown.style.display = 'block'; }
+  else els.countdown.style.display = 'none';
+});
+
+socket.on('playerCaught', ({ caughtId, hunterId, username, hunterUsername, avatarUrl }) => {
+  showKillEntry(username, avatarUrl, hunterUsername);
+  if (caughtId === myId) {
+    els.role.textContent = 'YOU WERE CAUGHT!';
+    els.role.style.color = '#ff5555';
+    alert('You were caught!');
+  }
+});
+
+
+socket.on('gameOver', ({ winnerTeam }) => {
+  clearInterval(graceTimer); graceTimer = null;
+  els.graceBanner.style.display = 'none';
+  const timerEl2 = document.getElementById('game-timer');
+  if (timerEl2) timerEl2.style.display = 'none';
+  const msg = winnerTeam === 'hunters' ? 'Hunters win! All runners caught.' : 'Runners win! Time ran out.';
+  els.role.textContent = 'Game Over - ' + msg;
+  els.role.style.color = '#ffdd44';
+  alert('Game Over! ' + msg);
+});
+
+socket.on('pingWarning', ({ countdown }) => {
+  els.pingBanner.className     = 'runner';
+  els.pingBanner.style.display = 'block';
+  els.pingBanner.innerHTML     = 'All locations revealed in<br><span style="font-size:2.5rem;letter-spacing:3px;">' + countdown + '</span>';
+});
+
+socket.on('locationPing', ({ allLocations, duration }) => {
+
+  els.pingBanner.className     = 'hunter';
+  els.pingBanner.style.display = 'block';
+  els.pingBanner.textContent   = 'All locations revealed for ' + (duration/1000) + 's!';
+
+
+  if (map && allLocations) {
+    Object.entries(allLocations).forEach(([id, p]) => {
+      if (id === myId) return; 
+      if (pingMarkers[id]) map.removeLayer(pingMarkers[id]);
+      const color = p.isHunter ? '#ff3333' : '#3388ff';
+      pingMarkers[id] = L.marker([p.lat, p.lng], { icon: makeIcon(color, true) })
+        .bindPopup(p.username + (p.isHunter ? ' - HUNTER (ping)' : ' - RUNNER (ping)'))
+        .addTo(map);
+    });
+  }
+
+  clearTimeout(pingTimeout);
+  pingTimeout = setTimeout(() => {
+    els.pingBanner.style.display = 'none';
+
+    Object.values(pingMarkers).forEach(m => map && map.removeLayer(m));
+    pingMarkers = {};
+
+    if (map) {
+      Object.keys(markers).forEach(id => {
+        if (id === myId) return; 
+        const theyAreHunter = currentHunterIds && currentHunterIds.includes(id);
+        const iAmHunter     = currentHunterIds && currentHunterIds.includes(myId);
+        const shouldKeep    = (iAmHunter && theyAreHunter)      
+                           || (!iAmHunter && !theyAreHunter);   
+        if (!shouldKeep) {
+          map.removeLayer(markers[id]);
+          delete markers[id];
+        }
+      });
+    }
+  }, duration);
+});
+
+els.resetBtn.addEventListener('click', () => {
+  clearInterval(graceTimer); graceTimer = null; graceTimerEndAt = null;
+  els.graceBanner.style.display = 'none';
+  const timerEl = document.getElementById('game-timer');
+  if (timerEl) timerEl.style.display = 'none';
+  els.startBtn.disabled    = false;
+  els.startBtn.textContent = 'Start Game (5s countdown)';
+  socket.emit('resetGame');
+});
+
+els.startBtn.addEventListener('click', () => {
+  const radius    = parseInt(els.zoneRadius.value)  || 500;
+  const graceSecs = parseInt(els.gracePeriod.value) || 0;
+  els.startBtn.disabled = true;
+  els.startBtn.textContent = 'Starting...';
+
+  const rawDuration  = els.gameDuration ? parseInt(els.gameDuration.value) : 10;
+  const gameDuration = (rawDuration || 10) * 60;
+  const pingSecs      = els.pingMins ? parseInt(els.pingMins.value) || 30 : 30;
+  const shrinkEnabled = document.getElementById('shrink-zone')?.checked || false;
+  const catchModeVal  = document.querySelector('input[name="catch-mode"]:checked')?.value || 'proximity';
+  const shrinkTarget  = parseInt(document.getElementById('shrink-target')?.value) || 20;
+  const shrinkDuration= parseInt(document.getElementById('shrink-duration')?.value) || 300;
+  console.log('[start] graceSecs:', graceSecs, 'gameDuration (secs):', gameDuration, 'pingSecs:', pingSecs);
+  function go(lat, lng) { socket.emit('startGame', { lat, lng, radius, graceSecs, gameDuration, pingSecs, shrinkEnabled, shrinkTarget, shrinkDuration, catchModeVal }); }
+
+  if (lastPos) {
+    go(lastPos.coords.latitude, lastPos.coords.longitude);
+  } else if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      p => go(p.coords.latitude, p.coords.longitude),
+      () => go(51.505, -0.09),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+    );
+  } else {
+    go(51.505, -0.09);
+  }
+});
+
+
+socket.on('zoneShrink', ({ radius }) => {
+  if (!map || !zoneCircle) return;
+  zoneCircle.setRadius(radius);
+});
+
+
+function showKillEntry(caughtUsername, caughtAvatarUrl, hunterUsername) {
+  const feed  = document.getElementById('kill-feed');
+  if (!feed) return;
+  const entry = document.createElement('div');
+  entry.className = 'kill-entry';
+  const avatarHtml = caughtAvatarUrl
+    ? '<img src="' + SERVER + caughtAvatarUrl + '" alt="">'
+    : '<div class="kill-avatar-placeholder">' + caughtUsername.charAt(0).toUpperCase() + '</div>';
+  entry.innerHTML = avatarHtml + '<span>💀 <strong>' + caughtUsername + '</strong>' + (hunterUsername ? ' caught by ' + hunterUsername : ' left the zone') + '</span>';
+  feed.appendChild(entry);
+
+  setTimeout(() => entry.remove(), 5000);
+}
+
+
+socket.on('gameTimer', ({ remaining }) => {
+  console.log('[gameTimer] remaining:', remaining);
+  const el = document.getElementById('game-timer');
+  console.log('[gameTimer] element found:', !!el, 'display:', el ? el.style.display : 'N/A');
+  if (!el) return;
+  if (remaining <= 0) { el.style.display = 'none'; return; }
+  const mins = Math.floor(remaining / 60);
+  const secs = remaining % 60;
+  const str  = mins + ':' + (secs < 10 ? '0' : '') + secs;
+  el.style.cssText = 'display:block; font-size:1.8rem; font-weight:bold; letter-spacing:2px; margin-top:0.3rem; color:' + (remaining <= 60 ? '#ff6666' : '#aaccff') + ';';
+  el.textContent = str;
+});
+
+
+if (navigator.geolocation) {
+  navigator.geolocation.watchPosition(
+    pos => {
+      lastPos = pos;
+      socket.emit('updateLocation', { lat: pos.coords.latitude, lng: pos.coords.longitude });
+    },
+    err => { console.warn('GPS:', err); },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+  );
+}
+
+let debugMode = false;
+let debugLat  = null;
+let debugLng  = null;
+
+function toggleDebug() {
+  debugMode = !debugMode;
+  document.getElementById('debug-panel').style.display = debugMode ? 'block' : 'none';
+  document.getElementById('debug-toggle').style.background = debugMode ? 'rgba(255,80,80,0.9)' : 'rgba(180,60,60,0.7)';
+  if (debugMode) console.log('[debug] Debug mode ON');
+  else console.log('[debug] Debug mode OFF - reverting to real GPS');
+}
+
+function applyDebugLocation() {
+  const lat = parseFloat(document.getElementById('debug-lat').value);
+  const lng = parseFloat(document.getElementById('debug-lng').value);
+  if (isNaN(lat) || isNaN(lng)) { alert('Enter valid lat/lng numbers'); return; }
+  debugLat = lat; debugLng = lng;
+  sendDebugLocation();
+}
+
+function nudgeLocation(dLat, dLng) {
+  if (debugLat === null) {
+
+    debugLat = lastPos ? lastPos.coords.latitude  : (map ? map.getCenter().lat : 51.505);
+    debugLng = lastPos ? lastPos.coords.longitude : (map ? map.getCenter().lng : -0.09);
+  }
+  debugLat += dLat;
+  debugLng += dLng;
+  document.getElementById('debug-lat').value = debugLat.toFixed(5);
+  document.getElementById('debug-lng').value = debugLng.toFixed(5);
+  sendDebugLocation();
+}
+
+function sendDebugLocation() {
+  if (debugLat === null) return;
+
+  document.getElementById('debug-coords').textContent = debugLat.toFixed(5) + ', ' + debugLng.toFixed(5);
+
+  lastPos = { coords: { latitude: debugLat, longitude: debugLng } };
+  socket.emit('updateLocation', { lat: debugLat, lng: debugLng });
+
+  if (map && myId) {
+    const fakePlayer = { lat: debugLat, lng: debugLng, caught: false, username: 'me' };
+    if (markers[myId]) {
+      markers[myId].setLatLng([debugLat, debugLng]);
+      map.setView([debugLat, debugLng], map.getZoom());
+    }
+  }
+  console.log('[debug] Location set to:', debugLat, debugLng);
+}
+
+
+socket.on('connect_error', err => { els.status.textContent = 'Connection issue: ' + err.message; els.status.style.color = '#ff7777'; });
+socket.on('disconnect',   r   => { els.status.textContent = 'Disconnected (' + r + ') - reconnecting...'; els.status.style.color = '#ffaa77'; });
+</script>
+  <button id="debug-toggle" onclick="toggleDebug()" title="Debug mode">🐛</button>
+  <div class="kill-feed" id="kill-feed"></div>
+</body>
+</html>
