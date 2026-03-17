@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gym Tracker - The XIV Project</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="left-stars"></div>
+<div id="right-stars"></div>
+
+<div class="main-content">
+  <img src="img/XIVlog.jpg" alt="XIV Logo" id="header-image">
+  <h1>Gym Tracker | The XIV Project</h1>
+
+  <main>
+    <p class="about-section">
+      A Tracking tool to track my gym stats and weights,<br>
+      The tracker tells me when i'm ready to increase the load.<br>
+    </p>
+
+    <div class="gym-tabs">
+      <button class="gym-tab active" onclick="switchTab('dagA', this)">Dag A</button>
+      <button class="gym-tab" onclick="switchTab('dagB', this)">Dag B</button>
+      <button class="gym-tab" onclick="switchTab('bench', this)">Bench Plan</button>
+      <button class="gym-tab" onclick="switchTab('calc', this)">Calculator</button>
+    </div>
+
+    <div id="dagA" class="gym-content active">
+      <div class="gym-day-label">Full Body — Focus Push / Pull</div>
+      <div class="gym-exercises" id="ex-A"></div>
+    </div>
+
+    <div id="dagB" class="gym-content">
+      <div class="gym-day-label">Full Body — Focus Legs + Pull / Push</div>
+      <div class="gym-exercises" id="ex-B"></div>
+    </div>
+
+    <div id="bench" class="gym-content">
+      <div class="gym-day-label">Bench Press — 12 week progression</div>
+      <div class="gym-week-row">
+        <label>Current week</label>
+        <select id="bench-week" onchange="saveBenchWeek(); renderBench()">
+          <option value="">— select —</option>
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>5</option><option>6</option><option>7</option><option>8</option>
+          <option>9</option><option>10</option><option>11</option><option>12</option>
+        </select>
+      </div>
+      <div id="bench-table"></div>
+    </div>
+
+    <div id="calc" class="gym-content">
+      <div class="gym-day-label">Freeform Rep Calculator</div>
+      <div class="gym-ex-card" style="padding:14px;width:80%;max-width:700px;margin:0 auto;">
+
+        <datalist id="ex-list"></datalist>
+
+        <div class="gym-set" style="margin-bottom:10px;">
+          <div class="gym-set-label">Exercise</div>
+          <div class="gym-set-inputs">
+            <input type="text" id="c-exercise" list="ex-list" placeholder="Select or type exercise name..."
+              style="width:100%;" oninput="calcExerciseChanged()" autocomplete="off">
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div class="gym-set">
+            <div class="gym-set-label">Weight (kg)</div>
+            <div class="gym-set-inputs">
+              <input type="number" id="c-weight" placeholder="e.g. 80" step="0.5" min="0" style="width:100%;" oninput="calcUpdate()">
+            </div>
+          </div>
+          <div class="gym-set">
+            <div class="gym-set-label">Reps</div>
+            <div class="gym-set-inputs">
+              <input type="number" id="c-reps" placeholder="e.g. 6" step="1" min="1" max="50" style="width:100%;" oninput="calcUpdate()">
+            </div>
+          </div>
+          <div class="gym-set">
+            <div class="gym-set-label">Sets</div>
+            <div class="gym-set-inputs">
+              <input type="number" id="c-sets" placeholder="e.g. 4" step="1" min="1" max="20" style="width:100%;" oninput="calcUpdate()">
+            </div>
+          </div>
+          <div class="gym-set">
+            <div class="gym-set-label">Weight step (kg)</div>
+            <div class="gym-set-inputs">
+              <input type="number" id="c-step" placeholder="e.g. 2.5" step="0.5" min="0.5" style="width:100%;" oninput="calcUpdate()">
+            </div>
+          </div>
+        </div>
+
+        <div id="calc-result"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <p style="margin-top:30px;">
+    <a href="index.html" class="back-link">&larr; Back to Home</a>
+  </p>
+</div>
+
+<script src="js/main.js"></script>
+<script>
+const BENCH = [
+  { label:"1–2", wk:[1,2],  weight:"42.5",    sets:"4×6" },
+  { label:"3",   wk:[3],    weight:"42.5–45",  sets:"4×6–8" },
+  { label:"4–5", wk:[4,5],  weight:"45",       sets:"4×6–8" },
+  { label:"6",   wk:[6],    weight:"45–47.5",  sets:"4×6–8" },
+  { label:"7–8", wk:[7,8],  weight:"47.5",     sets:"4×6–8" },
+  { label:"9",   wk:[9],    weight:"50",       sets:"4×5–6" },
+  { label:"10",  wk:[10],   weight:"50–52.5",  sets:"4×5–6" },
+  { label:"11",  wk:[11],   weight:"52.5–55",  sets:"4×4–5" },
+  { label:"12",  wk:[12],   weight:"55–60",    sets:"3–4×3–4" },
+];
+
+const DAG_A = [
+  { name:"Squat",                           sets:4, reps:[5,8],   sw:75,   step:2.5,  tr:8 },
+  { name:"Bench Press",                     sets:4, reps:[6,8],   sw:42.5, step:2.5,  tr:8, note:'<span onclick="switchTab(\'bench\', document.querySelector(\'.gym-tab:nth-child(3)\'))" style="cursor:pointer;color:#47c8ff;text-decoration:underline;text-underline-offset:3px;">See bench plan tab ↗</span>' },
+  { name:"Lat Pulldown",                    sets:3, reps:[6,8],   sw:60,   step:2.5,  tr:8 },
+  { name:"Seated Row",                      sets:3, reps:[6,8],   sw:60,   step:2.5,  tr:8 },
+  { name:"Incline Chest Press (dumbbells)", sets:3, reps:[6,8],   sw:14,   step:1.5,  tr:8 },
+  { name:"Lateral Raises / Dorsal Rise",    sets:3, reps:[12,15], sw:10,   step:1,    tr:15 },
+  { name:"Tricep Pushdown",                 sets:2, reps:[6,8],   sw:17.5, step:2.5,  tr:8 },
+  { name:"Hammer Curl",                     sets:2, reps:[8,8],   sw:16,   step:1.5,  tr:8 },
+  { name:"Cable Crunch",                    sets:3, reps:[12,15], sw:13.5, step:3.75, tr:15 },
+];
+
+const DAG_B = [
+  { name:"Leg Press",                 sets:3, reps:[8,8],   sw:150,  step:12.5, tr:8 },
+  { name:"Romanian Deadlift",         sets:3, reps:[8,8],   sw:45,   step:3.75, tr:8 },
+  { name:"Pull-Ups / Lat Pulldown",   sets:3, reps:[6,8],   sw:60,   step:2.5,  tr:8 },
+  { name:"Incline Chest Press",       sets:3, reps:[6,8],   sw:14,   step:1.5,  tr:8 },
+  { name:"Flys (pec machine)",        sets:2, reps:[7,8],   sw:42.5, step:2.5,  tr:8 },
+  { name:"Overhead Tricep Extension", sets:2, reps:[6,8],   sw:10,   step:1.5,  tr:8 },
+  { name:"One-Handed Cable Biceps",   sets:2, reps:[7,8],   sw:7.5,  step:1,    tr:8 },
+  { name:"Preacher Curl",             sets:2, reps:[6,8],   sw:20,   step:1.5,  tr:8 },
+  { name:"Cable Crunch",              sets:3, reps:[12,15], sw:13.5, step:3.75, tr:15 },
+];
+
+const LS_KEY = 'xiv_gym_v1';
+
+function loadData() {
+  try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; }
+  catch { return {}; }
+}
+
+function saveField(key, value) {
+  const data = loadData();
+  data[key] = value;
+  localStorage.setItem(LS_KEY, JSON.stringify(data));
+}
+
+function getField(key) {
+  return loadData()[key] ?? '';
+}
+
+function saveBenchWeek() {
+  saveField('bench_week', document.getElementById('bench-week').value);
+}
+
+function slug(name, day) {
+  return name.replace(/[^a-z0-9]/gi, '_') + '_' + day;
+}
+
+function buildCard(ex, day, container) {
+  const s = slug(ex.name, day);
+  const rr = ex.reps[0] === ex.reps[1] ? ex.reps[0] : ex.reps[0] + '–' + ex.reps[1];
+
+  let setsHTML = '';
+  for (let i = 0; i < ex.sets; i++) {
+    setsHTML += `<div class="gym-set">
+      <div class="gym-set-label">Set ${i + 1}</div>
+      <div class="gym-set-inputs">
+        <input type="number" id="w_${s}_${i}" placeholder="${ex.sw}" step="0.5" min="0">
+        <span class="gym-set-sep">kg ×</span>
+        <input type="number" id="r_${s}_${i}" placeholder="${ex.reps[1]}" step="1" min="0" max="50">
+        <span class="gym-set-sep">reps</span>
+      </div>
+    </div>`;
+  }
+
+  const noteHTML = ex.note
+    ? `<div style="font-family:monospace;font-size:0.68rem;color:#47c8ff;padding:0 14px 8px;position:relative;z-index:1;">${ex.note}</div>`
+    : '';
+
+  const card = document.createElement('div');
+  card.className = 'gym-ex-card';
+  card.id = 'card_' + s;
+  card.innerHTML = `
+    <div class="gym-ex-header" onclick="toggleBody('body_${s}')">
+      <div>
+        <div class="gym-ex-name">${ex.name}</div>
+        <div class="gym-ex-meta">${ex.sets}×${rr} reps — start ${ex.sw} kg</div>
+      </div>
+      <span class="gym-badge" id="badge_${s}">waiting</span>
+    </div>
+    ${noteHTML}
+    <div class="gym-ex-body" id="body_${s}">
+      <div class="gym-sets-grid">${setsHTML}</div>
+      <div id="panel_${s}"></div>
+    </div>`;
+  container.appendChild(card);
+
+  let hasSaved = false;
+  for (let i = 0; i < ex.sets; i++) {
+    const wEl = document.getElementById(`w_${s}_${i}`);
+    const rEl = document.getElementById(`r_${s}_${i}`);
+    const savedW = getField(`w_${s}_${i}`);
+    const savedR = getField(`r_${s}_${i}`);
+    if (savedW !== '') { wEl.value = savedW; hasSaved = true; }
+    if (savedR !== '') { rEl.value = savedR; hasSaved = true; }
+    wEl.addEventListener('input', () => { saveField(`w_${s}_${i}`, wEl.value); update(ex, day); });
+    rEl.addEventListener('input', () => { saveField(`r_${s}_${i}`, rEl.value); update(ex, day); });
+  }
+
+  if (hasSaved) {
+    document.getElementById('body_' + s).classList.add('open');
+    update(ex, day);
+  }
+}
+
+function toggleBody(id) {
+  document.getElementById(id).classList.toggle('open');
+}
+
+function update(ex, day) {
+  const s = slug(ex.name, day);
+  const filled = [];
+  for (let i = 0; i < ex.sets; i++) {
+    const w = parseFloat(document.getElementById(`w_${s}_${i}`)?.value);
+    const r = parseInt(document.getElementById(`r_${s}_${i}`)?.value);
+    if (!isNaN(w) && !isNaN(r) && w > 0 && r > 0) filled.push({ w, r });
+  }
+
+  const card  = document.getElementById('card_' + s);
+  const badge = document.getElementById('badge_' + s);
+  const panel = document.getElementById('panel_' + s);
+
+  card.classList.remove('state-increase', 'state-good');
+
+  if (!filled.length) {
+    badge.className = 'gym-badge';
+    badge.textContent = 'waiting';
+    panel.innerHTML = '';
+    return;
+  }
+
+  const avgW = filled.reduce((a, s) => a + s.w, 0) / filled.length;
+  const avgR = filled.reduce((a, s) => a + s.r, 0) / filled.length;
+  const vol  = filled.reduce((a, s) => a + s.w * s.r, 0);
+  const allTarget  = filled.every(s => s.r >= ex.tr);
+  const someTarget = filled.some(s => s.r >= ex.tr);
+  const next = +(avgW + ex.step).toFixed(2);
+
+  let bClass, bText, advClass, advHTML;
+
+  if (allTarget) {
+    bClass = 'b-increase'; bText = '↑ increase'; advClass = '';
+    advHTML = `Increase to <b>${next} kg</b> next session. All sets hit ${ex.tr} reps.`;
+    card.classList.add('state-increase');
+  } else if (someTarget) {
+    bClass = 'b-partial'; bText = 'almost there'; advClass = '';
+    advHTML = `Some sets hit ${ex.tr} reps. Keep <b>${avgW.toFixed(1)} kg</b> until <b>all sets</b> reach target, then go to <b>${next} kg</b>.`;
+  } else if (filled.every(s => s.r >= ex.reps[0])) {
+    bClass = 'b-good'; bText = 'in zone'; advClass = 'a-good';
+    advHTML = `Reps are in the target range. Stay at <b>${avgW.toFixed(1)} kg</b> until you consistently hit ${ex.tr} reps per set.`;
+    card.classList.add('state-good');
+  } else {
+    bClass = ''; bText = 'building'; advClass = '';
+    advHTML = `Reps below the floor. Focus on form and try for one extra rep per set. Current avg: <b>${avgR.toFixed(1)} reps</b>.`;
+  }
+
+  badge.className = 'gym-badge ' + bClass;
+  badge.textContent = bText;
+
+  const maxVol = ex.sets * ex.tr * next;
+  const pct = Math.min(100, Math.round((vol / maxVol) * 100));
+
+  panel.innerHTML = `<div class="gym-result">
+    <div class="gym-stat">
+      <div class="gym-stat-label">Avg weight</div>
+      <div class="gym-stat-val c-blue">${avgW.toFixed(1)} kg</div>
+    </div>
+    <div class="gym-stat">
+      <div class="gym-stat-label">Avg reps</div>
+      <div class="gym-stat-val">${avgR.toFixed(1)}</div>
+    </div>
+    <div class="gym-stat">
+      <div class="gym-stat-label">Volume</div>
+      <div class="gym-stat-val c-yellow">${Math.round(vol)} kg</div>
+      <div class="gym-vol-bar"><div class="gym-vol-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="gym-stat">
+      <div class="gym-stat-label">Next weight</div>
+      <div class="gym-stat-val ${allTarget ? 'c-green' : ''}">${allTarget ? next + ' kg' : '—'}</div>
+    </div>
+    <div class="gym-advice ${advClass}">${advHTML}</div>
+  </div>`;
+}
+
+function calcPopulateList() {
+  const all = [...DAG_A, ...DAG_B];
+  const seen = new Set();
+  const dl = document.getElementById('ex-list');
+  dl.innerHTML = '';
+  all.forEach(ex => {
+    if (!seen.has(ex.name)) {
+      seen.add(ex.name);
+      const opt = document.createElement('option');
+      opt.value = ex.name;
+      dl.appendChild(opt);
+    }
+  });
+}
+
+function calcExerciseChanged() {
+  const name = document.getElementById('c-exercise').value.trim();
+  saveField('calc_c-exercise', name);
+  const match = [...DAG_A, ...DAG_B].find(e => e.name.toLowerCase() === name.toLowerCase());
+  if (match) {
+    document.getElementById('c-step').value = match.step;
+    document.getElementById('c-sets').value = match.sets;
+    saveField('calc_c-step', match.step);
+    saveField('calc_c-sets', match.sets);
+  }
+  calcUpdate();
+}
+
+function calcUpdate() {
+  const w      = parseFloat(document.getElementById('c-weight').value);
+  const r      = parseInt(document.getElementById('c-reps').value);
+  const sets   = parseInt(document.getElementById('c-sets').value);
+  const step   = parseFloat(document.getElementById('c-step').value);
+  const exName = document.getElementById('c-exercise').value.trim();
+
+  ['c-exercise','c-weight','c-reps','c-sets','c-step'].forEach(id => {
+    saveField('calc_' + id, document.getElementById(id).value);
+  });
+
+  const out = document.getElementById('calc-result');
+
+  if (isNaN(w) || isNaN(r) || w <= 0 || r <= 0) {
+    out.innerHTML = '';
+    return;
+  }
+
+  const match = [...DAG_A, ...DAG_B].find(e => e.name.toLowerCase() === exName.toLowerCase());
+  const orm   = r === 1 ? w : w * (1 + r / 30);
+  const vol   = isNaN(sets) ? w * r : w * r * sets;
+  const volLabel = isNaN(sets) ? `${w} × ${r}` : `${w} × ${r} × ${sets}`;
+  const next  = isNaN(step) ? null : +(w + step).toFixed(2);
+
+  let adviceHTML = '';
+  if (match) {
+    const repMin = match.reps[0], repMax = match.reps[1], tr = match.tr;
+    const prog = match.sw > 0 ? Math.round(((w - match.sw) / match.sw) * 100) : null;
+    if (r >= tr) {
+      adviceHTML = `<b>↑ Ready to increase.</b> You hit ${r} reps — target is ${tr}. Next session: <b>${next !== null ? next + ' kg' : 'increase weight'}</b>.`;
+    } else if (r >= repMin) {
+      adviceHTML = `In the zone (${repMin}–${repMax} reps). Hit <b>${tr} reps</b> to unlock the next weight. ${next !== null ? 'Next: <b>' + next + ' kg</b>.' : ''}`;
+    } else {
+      adviceHTML = `Below target range (${repMin}–${repMax} reps). Focus on form and try for one extra rep each session.`;
+    }
+    if (prog !== null && prog > 0) {
+      adviceHTML += ` <span style="color:var(--accent-color)">+${prog}% from start weight (${match.sw} kg)</span>`;
+    }
+  }
+
+  function fromOrm(pct) { return Math.round((orm * pct) / 0.5) * 0.5; }
+  const targets = [
+    { pct: 0.95, label:'~1 rep',   highlight: match && match.tr === 1 },
+    { pct: 0.90, label:'~2 reps',  highlight: false },
+    { pct: 0.85, label:'~3 reps',  highlight: false },
+    { pct: 0.80, label:'~5 reps',  highlight: match && match.reps[0] <= 5  && match.reps[1] >= 5 },
+    { pct: 0.75, label:'~6 reps',  highlight: match && match.reps[0] <= 6  && match.reps[1] >= 6 },
+    { pct: 0.70, label:'~8 reps',  highlight: match && match.reps[0] <= 8  && match.reps[1] >= 8 },
+    { pct: 0.65, label:'~10 reps', highlight: match && match.reps[0] <= 10 && match.reps[1] >= 10 },
+    { pct: 0.60, label:'~12 reps', highlight: match && match.reps[0] <= 12 && match.reps[1] >= 12 },
+  ];
+
+  out.innerHTML = `
+    ${exName ? `<div style="font-family:'Share Tech Mono',monospace;font-size:0.7rem;letter-spacing:0.08em;text-transform:uppercase;color:var(--accent-color);margin-bottom:10px;">> ${exName}${match ? '' : ' (custom)'}</div>` : ''}
+    <div class="gym-result" style="margin-bottom:10px;">
+      <div class="gym-stat">
+        <div class="gym-stat-label">Est. 1RM</div>
+        <div class="gym-stat-val c-yellow">${orm.toFixed(1)} kg</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--accent-color);margin-top:2px;">Epley formula</div>
+      </div>
+      <div class="gym-stat">
+        <div class="gym-stat-label">Volume</div>
+        <div class="gym-stat-val c-blue">${Math.round(vol)} kg</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--accent-color);margin-top:2px;">${volLabel}</div>
+      </div>
+      ${next !== null ? `
+      <div class="gym-stat">
+        <div class="gym-stat-label">Next weight</div>
+        <div class="gym-stat-val c-green">${next} kg</div>
+        <div style="font-family:'Share Tech Mono',monospace;font-size:0.6rem;color:var(--accent-color);margin-top:2px;">+${step} kg step</div>
+      </div>` : ''}
+      ${adviceHTML ? `<div class="gym-advice a-good">${adviceHTML}</div>` : ''}
+    </div>
+    <div class="gym-ex-card" style="padding:12px 14px;">
+      <div class="gym-set-label" style="margin-bottom:10px;">% of 1RM — weight targets</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px;">
+        ${targets.map(t => `
+          <div class="gym-set" style="flex-direction:row;justify-content:space-between;align-items:center;${t.highlight ? 'border-color:#e8ff47;' : ''}">
+            <span style="font-family:'Share Tech Mono',monospace;font-size:0.68rem;color:${t.highlight ? '#e8ff47' : 'var(--accent-color)'};">${t.label}</span>
+            <span style="font-family:'Share Tech Mono',monospace;font-size:0.88rem;color:${t.highlight ? '#e8ff47' : 'var(--text-color)'};">${fromOrm(t.pct)} kg</span>
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function switchTab(id, btn) {
+  document.querySelectorAll('.gym-content').forEach(c => c.classList.remove('active'));
+  document.querySelectorAll('.gym-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+function renderBench() {
+  const w = parseInt(document.getElementById('bench-week').value);
+  const rows = BENCH.map(r => {
+    const cur = !isNaN(w) && r.wk.includes(w);
+    return `<tr class="${cur ? 'cur-week' : ''}">
+      <td>Week ${r.label}</td><td>${r.weight} kg</td><td>${r.sets}</td>
+    </tr>`;
+  }).join('');
+  document.getElementById('bench-table').innerHTML = `
+    <table class="gym-prog-table">
+      <thead><tr><th>Week</th><th>Weight</th><th>Sets × Reps</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+(function init() {
+  DAG_A.forEach(ex => buildCard(ex, 'A', document.getElementById('ex-A')));
+  DAG_B.forEach(ex => buildCard(ex, 'B', document.getElementById('ex-B')));
+  ['c-exercise','c-weight','c-reps','c-sets','c-step'].forEach(id => {
+    const v = getField('calc_' + id);
+    if (v !== '') document.getElementById(id).value = v;
+  });
+  calcPopulateList();
+  calcUpdate();
+  const savedWeek = getField('bench_week');
+  if (savedWeek) document.getElementById('bench-week').value = savedWeek;
+  renderBench();
+})();
+</script>
+</body>
+</html>
