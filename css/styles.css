@@ -657,7 +657,7 @@ button:hover {
   color: var(--link-color);
 }
 
- .gym-tabs {
+.gym-tabs {
   display: flex;
   gap: 8px;
   margin: 18px auto 10px auto;
@@ -983,7 +983,43 @@ button:hover {
   .gym-day-label,
   .gym-exercises,
   .gym-week-row { width: 95%; }
+
+  .gym-tabs { gap: 6px; }
+
+  .gym-tab {
+    font-size: 0.72rem;
+    padding: 8px 12px;
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .gym-ex-header { padding: 12px; }
+  .gym-ex-name { font-size: 0.9rem; }
+  .gym-ex-body { padding: 10px 12px; }
+
   .gym-sets-grid { grid-template-columns: 1fr 1fr; }
+
+  .gym-set-inputs input {
+    width: 56px;
+    font-size: 0.85rem;
+    padding: 7px 6px;
+  }
+
   .gym-result { flex-direction: column; gap: 10px; }
-  .gym-advice { border-left: none; border-top: 1px solid var(--project-border); padding-left: 0; padding-top: 8px; }
+
+  .gym-advice {
+    border-left: none;
+    border-top: 1px solid var(--project-border);
+    padding-left: 0;
+    padding-top: 10px;
+    font-size: 0.78rem;
+  }
+
+  .gym-stat-val { font-size: 1.3rem; }
+
+  .gym-prog-table { font-size: 0.72rem; }
+  .gym-prog-table th,
+  .gym-prog-table td { padding: 8px 8px; }
+
+  .gym-week-row select { font-size: 0.85rem; padding: 8px 10px; }
 }
